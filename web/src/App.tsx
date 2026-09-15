@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Search, Sparkles, BookOpen } from 'lucide-react';
+import { Search, Sparkles, BookOpen, Footprints, Sun, Moon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { searchTerms, getTerm, enrichTerm, type SearchRow, type Term } from '@/lib/api';
+import { useTheme } from '@/lib/use-theme';
+import { cn } from '@/lib/utils';
 import TermDetail from '@/components/TermDetail';
+
+const SUGGESTIONS = ['Derby', 'Goodyear Welt', 'Lasting', 'Outsole', 'Blake Stitch'];
 
 export default function App() {
   const [query, setQuery] = useState('');
@@ -18,6 +22,7 @@ export default function App() {
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const debounceRef = useRef<number | undefined>(undefined);
+  const { theme, toggle } = useTheme();
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -93,107 +98,204 @@ export default function App() {
   }
 
   const noResults = !searching && query.trim().length > 0 && results.length === 0;
+  const hasQuery = query.trim().length > 0;
+  const showWorkspace = hasQuery || selected !== null;
 
   return (
-    <div className="flex min-h-screen flex-col px-5 pb-16">
-      <header className="flex items-center gap-2 py-6">
-        <BookOpen className="size-5 text-accent" />
-        <h1 className="font-display text-xl font-semibold tracking-tight">Footwear Words</h1>
-        <Badge className="ml-2">footwear development glossary</Badge>
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-40 border-b-2 border-border bg-background/85 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-5 py-3">
+          <button
+            onClick={() => {
+              setQuery('');
+              setResults([]);
+              setSelected(null);
+              setSearchError(null);
+              setEnrichError(null);
+            }}
+            aria-label="Footwear Words — về trang chủ"
+            className="group flex min-w-0 cursor-pointer items-center gap-3 rounded-lg outline-none transition-transform duration-150 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-accent-ink/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg border-2 border-border bg-accent shadow-hard-sm transition-transform duration-150 group-hover:-rotate-6">
+              <Footprints className="size-5 text-accent-foreground" aria-hidden />
+            </span>
+            <span className="flex min-w-0 flex-col items-start">
+              <span className="font-display text-lg uppercase leading-none tracking-wide">
+                Footwear Words
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted">
+                footwear glossary · tiếng Việt
+              </span>
+            </span>
+          </button>
+          <Button
+            variant="ghost"
+            onClick={toggle}
+            aria-label={theme === 'dark' ? 'Chuyển sang chế độ sáng' : 'Chuyển sang chế độ tối'}
+            className="ml-auto size-9 rounded-lg p-0"
+          >
+            {theme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
+          </Button>
+        </div>
       </header>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted" />
-        <Input
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm thuật ngữ footwear... (VD: Derby, lasting, welt)"
-          className="pl-12 text-lg"
-        />
-      </div>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-5 pb-16 pt-7">
+        {!showWorkspace && (
+          <section className="mx-auto w-full max-w-3xl pb-14 pt-12 text-center sm:pt-16">
+            <Badge className="-rotate-2 bg-accent text-accent-foreground">
+              từ điển sống · AI tự học từ mới
+            </Badge>
+            <h1 className="mt-6 font-display text-[clamp(2.6rem,7vw,4.75rem)] uppercase leading-[0.95] tracking-wide">
+              Nói{' '}
+              <span className="inline-block -rotate-1 bg-accent px-2 text-accent-foreground">
+                giày
+              </span>{' '}
+            </h1>
+            <p className="mx-auto mt-5 max-w-xl text-base text-muted sm:text-lg">
+              Tra thuật ngữ footwear chuẩn ngành với giải thích tiếng Việt dễ hiểu. Thiếu từ? AI bổ
+              sung ngay và lưu vĩnh viễn vào từ điển.
+            </p>
+          </section>
+        )}
 
-      {searchError && <p className="mt-4 text-sm text-red-400">Lỗi tìm kiếm: {searchError}</p>}
+        <div className="relative mx-auto w-full max-w-2xl">
+          <Search
+            className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-muted"
+            aria-hidden
+          />
+          <Input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Tìm thuật ngữ footwear... (VD: Derby, lasting, welt)"
+            aria-label="Tìm thuật ngữ footwear"
+            className="h-14 rounded-full pl-14 pr-5 shadow-hard-sm focus-visible:shadow-hard"
+          />
+        </div>
 
-      <div className="mt-6 grid flex-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="flex flex-col gap-2">
-          {searching && (
-            <>
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
-            </>
-          )}
-
-          {!searching &&
-            results.map((r) => (
+        {!showWorkspace && (
+          <div className="mx-auto mt-6 flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-muted">Thử:</span>
+            {SUGGESTIONS.map((s) => (
               <button
-                key={r.slug}
-                onClick={() => void openTerm(r.slug)}
-                className={`rounded-xl border px-4 py-3 text-left transition-colors ${
-                  selected?.slug === r.slug
-                    ? 'border-accent/60 bg-panel-strong'
-                    : 'border-border bg-panel hover:border-accent/40'
-                }`}
+                key={s}
+                onClick={() => void loadOrEnrich(s)}
+                className="cursor-pointer rounded-full border-2 border-border bg-panel px-3 py-1 text-xs font-semibold transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold">{r.term}</span>
-                  {r.category && <Badge>{r.category}</Badge>}
-                </div>
-                <p className="mt-1 line-clamp-2 text-sm text-muted">{r.shortVi}</p>
+                {s}
               </button>
             ))}
+          </div>
+        )}
 
-          {/* Enrich-on-miss */}
-          {noResults && (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-start gap-3 p-5">
-                <p className="text-sm text-muted">
-                  Chưa có <span className="font-semibold text-foreground">“{query.trim()}”</span> trong
-                  bộ từ. Hỏi AI để giải thích và lưu vào từ điển.
-                </p>
-                {enrichError && <p className="text-sm text-red-400">{enrichError}</p>}
-                <Button onClick={() => void loadOrEnrich(query.trim())} disabled={enriching}>
-                  <Sparkles />
-                  {enriching ? 'Đang hỏi AI...' : `Enrich “${query.trim()}” bằng AI`}
-                </Button>
-                {enriching && (
-                  <div className="w-full space-y-2 pt-1">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-5/6" />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        {searchError && (
+          <p className="mt-4 text-center text-sm font-medium text-danger">
+            Lỗi tìm kiếm: {searchError}
+          </p>
+        )}
 
-        {/* Detail column */}
-        <div className="mx-auto w-full max-w-3xl">
-          {loadingDetail && (
-            <div className="space-y-3">
-              <Skeleton className="h-8 w-1/2" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="h-64 w-full" />
+        {showWorkspace && (
+          <div className="mt-12 grid flex-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="flex flex-col gap-3">
+              {searching && (
+                <>
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </>
+              )}
+
+              {!searching &&
+                results.map((r) => {
+                  const active = selected?.slug === r.slug;
+                  return (
+                    <button
+                      key={r.slug}
+                      onClick={() => void openTerm(r.slug)}
+                      className={cn(
+                        'cursor-pointer rounded-xl border-2 border-border bg-panel px-4 py-3 text-left transition-all duration-150',
+                        active
+                          ? 'bg-accent text-accent-foreground shadow-hard'
+                          : 'hover:-translate-y-0.5 hover:shadow-hard-sm',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold">{r.term}</span>
+                        {r.category && <Badge>{r.category}</Badge>}
+                      </div>
+                      <p
+                        className={cn(
+                          'mt-1 line-clamp-2 text-sm',
+                          active ? 'text-accent-foreground/75' : 'text-muted',
+                        )}
+                      >
+                        {r.shortVi}
+                      </p>
+                    </button>
+                  );
+                })}
+
+              {/* Enrich-on-miss */}
+              {noResults && (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-start gap-3 p-5">
+                    <p className="text-sm text-muted">
+                      Chưa có{' '}
+                      <span className="font-bold text-foreground">“{query.trim()}”</span> trong bộ
+                      từ. Hỏi AI để giải thích và lưu vào từ điển.
+                    </p>
+                    {enrichError && <p className="text-sm font-medium text-danger">{enrichError}</p>}
+                    <Button onClick={() => void loadOrEnrich(query.trim())} disabled={enriching}>
+                      <Sparkles aria-hidden />
+                      {enriching ? 'Đang hỏi AI...' : `Enrich “${query.trim()}” bằng AI`}
+                    </Button>
+                    {enriching && (
+                      <div className="w-full space-y-2 pt-1">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-5/6" />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          )}
-          {!loadingDetail && enrichError && selected && (
-            <p className="mb-3 text-sm text-red-400">{enrichError}</p>
-          )}
-          {!loadingDetail && selected && (
-            <TermDetail term={selected} onTermClick={(t) => void loadOrEnrich(t)} />
-          )}
-          {!loadingDetail && !selected && (
-            <div className="flex h-full min-h-64 items-center justify-center rounded-xl border border-dashed border-border">
-              <p className="text-sm text-muted">
-                Chọn một thuật ngữ để xem giải thích chi tiết
-              </p>
+
+            {/* Detail column */}
+            <div className="mx-auto w-full max-w-3xl">
+              {loadingDetail && (
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-1/2" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              )}
+              {!loadingDetail && enrichError && selected && (
+                <p className="mb-3 text-sm font-medium text-danger">{enrichError}</p>
+              )}
+              {!loadingDetail && selected && (
+                <TermDetail term={selected} onTermClick={(t) => void loadOrEnrich(t)} />
+              )}
+              {!loadingDetail && !selected && (
+                <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border/50 p-8 text-center">
+                  <BookOpen className="size-6 text-muted" aria-hidden />
+                  <p className="text-sm text-muted">
+                    Chọn một thuật ngữ để xem giải thích chi tiết
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+        )}
+      </main>
+
+      <footer className="border-t-2 border-border">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-5 py-4 text-xs text-muted">
+          <span className="font-bold uppercase tracking-widest">Footwear Words</span>
+          <span>Tra nhanh · Hiểu kỹ · AI tự bổ sung</span>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

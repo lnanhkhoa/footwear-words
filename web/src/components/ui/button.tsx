@@ -4,18 +4,21 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border-2 border-border text-sm font-bold transition-[transform,box-shadow,background-color,color,border-color] duration-150 outline-none focus-visible:ring-2 focus-visible:ring-accent-ink/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        default: 'bg-accent text-[#0b1220] hover:bg-accent/90',
-        secondary: 'bg-chip text-foreground hover:bg-chip/70',
-        ghost: 'hover:bg-chip text-muted hover:text-foreground',
+        // Primary volt: hover "đè" nút xuống — shadow thu về 0, transform thay layout.
+        default:
+          'bg-accent text-accent-foreground shadow-hard-sm hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none',
+        secondary:
+          'bg-panel text-foreground shadow-hard-sm hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none',
+        ghost: 'border-transparent text-muted hover:bg-panel-strong hover:text-foreground',
       },
       size: {
-        default: 'h-9 px-4 py-2',
+        default: 'h-10 px-4 py-2',
         sm: 'h-8 rounded-md px-3 text-xs',
-        lg: 'h-10 rounded-md px-6',
+        lg: 'h-12 rounded-lg px-6 text-base',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },
