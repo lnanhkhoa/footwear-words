@@ -63,13 +63,15 @@ export default function App() {
     }
   }
 
-  async function enrichCurrent() {
-    const term = query.trim();
-    if (!term) return;
+  /** Chip click / miss-card button: server returns existing term or enriches via AI. */
+  async function loadOrEnrich(term: string) {
+    const trimmed = term.trim();
+    if (!trimmed) return;
+    setLoadingDetail(true);
     setEnriching(true);
     setEnrichError(null);
     try {
-      const data = await enrichTerm(term);
+      const data = await enrichTerm(trimmed);
       setSelected(data.term);
       setResults((prev) => {
         const row: SearchRow = {
@@ -85,19 +87,15 @@ export default function App() {
     } catch (err) {
       setEnrichError(err instanceof Error ? err.message : String(err));
     } finally {
+      setLoadingDetail(false);
       setEnriching(false);
     }
-  }
-
-  function searchFor(term: string) {
-    setQuery(term);
-    void runSearch(term);
   }
 
   const noResults = !searching && query.trim().length > 0 && results.length === 0;
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 pb-16">
+    <div className="flex min-h-screen flex-col px-5 pb-16">
       <header className="flex items-center gap-2 py-6">
         <BookOpen className="size-5 text-accent" />
         <h1 className="font-display text-xl font-semibold tracking-tight">Footwear Words</h1>
@@ -117,8 +115,7 @@ export default function App() {
 
       {searchError && <p className="mt-4 text-sm text-red-400">Lỗi tìm kiếm: {searchError}</p>}
 
-      <div className="mt-6 grid flex-1 gap-6 lg:grid-cols-[340px_1fr]">
-        {/* Results column */}
+      <div className="mt-6 grid flex-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="flex flex-col gap-2">
           {searching && (
             <>
@@ -156,7 +153,7 @@ export default function App() {
                   bộ từ. Hỏi AI để giải thích và lưu vào từ điển.
                 </p>
                 {enrichError && <p className="text-sm text-red-400">{enrichError}</p>}
-                <Button onClick={() => void enrichCurrent()} disabled={enriching}>
+                <Button onClick={() => void loadOrEnrich(query.trim())} disabled={enriching}>
                   <Sparkles />
                   {enriching ? 'Đang hỏi AI...' : `Enrich “${query.trim()}” bằng AI`}
                 </Button>
@@ -173,7 +170,7 @@ export default function App() {
         </div>
 
         {/* Detail column */}
-        <div>
+        <div className="mx-auto w-full max-w-3xl">
           {loadingDetail && (
             <div className="space-y-3">
               <Skeleton className="h-8 w-1/2" />
@@ -182,8 +179,11 @@ export default function App() {
               <Skeleton className="h-64 w-full" />
             </div>
           )}
+          {!loadingDetail && enrichError && selected && (
+            <p className="mb-3 text-sm text-red-400">{enrichError}</p>
+          )}
           {!loadingDetail && selected && (
-            <TermDetail term={selected} onTermClick={searchFor} />
+            <TermDetail term={selected} onTermClick={(t) => void loadOrEnrich(t)} />
           )}
           {!loadingDetail && !selected && (
             <div className="flex h-full min-h-64 items-center justify-center rounded-xl border border-dashed border-border">
