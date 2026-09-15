@@ -90,6 +90,28 @@ web/src/
 | `PORT` | | `8787` |
 | `VITE_API_URL` | | `''` (dev dùng proxy `/api` → `:8787`) |
 
+## Deploy Vercel
+
+1 project Vercel duy nhất (Root Directory = repo root), config ở `vercel.json`:
+- `web/` build static → `web/dist` (cùng origin nên **không** set `VITE_API_URL`).
+- `api/index.ts` = Vercel Function (Node) bọc `server/src/app.ts`; `/api/*`, `/health` rewrite vào đây.
+
+```bash
+# 1. DB: dùng URL pooled (Neon pooler / Supabase :6543), migrate 1 lần từ máy local
+cd server && DATABASE_URL="<prod-url>" bun run migrate
+
+# 2. Link + env (Production & Preview)
+bunx vercel link
+bunx vercel env add DATABASE_URL
+bunx vercel env add ZAI_API_KEY      # + ZAI_BASE_URL / ZAI_MODEL nếu khác mặc định
+
+# 3. Deploy (hoặc import repo trên vercel.com để auto-deploy mỗi lần push)
+bunx vercel            # preview
+bunx vercel --prod     # production
+```
+
+Seed data prod: `cd server && DATABASE_URL="<prod-url>" bun run seed`.
+
 ## Đã verify
 
 - `bun run typecheck` + `bun run build` sạch cả 2 project.

@@ -6,3 +6,6 @@ dist
 .DS_Store
 server/dist
 web/dist
+.vercel
+.env*
+!.env.example

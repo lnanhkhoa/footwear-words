@@ -2,9 +2,12 @@
 // so load it explicitly (without overriding vars already set in the environment).
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+// No-op on Vercel (no .env file shipped) — env vars come from project settings.
 try {
-  const rootEnv = path.resolve(import.meta.dir, '../../.env');
+  // import.meta.url instead of Bun-only import.meta.dir so this also runs on Node.
+  const rootEnv = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env');
   for (const line of readFileSync(rootEnv, 'utf8').split('\n')) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
     if (!m) continue;

@@ -1,0 +1,8 @@
+# Never upload local secrets with `vercel deploy`; set env vars in Vercel project settings.
+.env
+.env.*
+!.env.example
+node_modules
+server/dist
+web/dist
+plans
