@@ -1,0 +1,21 @@
+# Mỗi dòng 1 thuật ngữ tiếng Anh. Dòng bắt đầu bằng # bị bỏ qua.
+Derby
+Oxford
+Vamp
+Quarter
+Last
+Lasting
+Outsole
+Midsole
+Insole
+Welt
+Goodyear Welt
+Toe Puff
+Counter
+Eyelet
+Tongue
+Shank
+Heel Counter
+Blake Stitch
+Cementing
+Skiving
