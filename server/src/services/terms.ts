@@ -2,7 +2,7 @@ import { sql as pg, db } from '../db/client.js';
 import { terms, type Term } from '../db/schema.js';
 import { sql } from 'drizzle-orm';
 import { slugify } from '../lib/slug.js';
-import { enrichTerm, type EnrichedTerm } from './enrich.js';
+import type { EnrichedTerm } from './enrich.js';
 
 export interface SearchRow {
   id: number;
@@ -77,11 +77,3 @@ export async function upsertEnriched(e: EnrichedTerm, source: 'ai' | 'seed'): Pr
   return row;
 }
 
-/** Return existing term or enrich via AI, persist, and return it. */
-export async function getOrEnrich(rawTerm: string): Promise<{ term: Term; created: boolean }> {
-  const existing = await findByTerm(rawTerm);
-  if (existing) return { term: existing, created: false };
-  const enriched = await enrichTerm(rawTerm);
-  const term = await upsertEnriched(enriched, 'ai');
-  return { term, created: true };
-}

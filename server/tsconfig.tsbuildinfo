@@ -1,0 +1,1 @@
+{"root":["./src/app.ts","./src/env.ts","./src/index.ts","./src/ai/zai.ts","./src/db/client.ts","./src/db/migrate.ts","./src/db/schema.ts","./src/lib/slug.ts","./src/services/enrich.ts","./src/services/terms.ts","./scripts/mock-zai.ts","./scripts/seed.ts"],"version":"5.9.3"}

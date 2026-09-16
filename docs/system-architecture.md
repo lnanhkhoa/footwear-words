@@ -19,10 +19,12 @@
 1. **Search**: UI debounce 300ms → `GET /api/terms/search?q=` → pg_trgm
    `similarity()` + `%` operator trên `term`/`short_vi` → xếp theo similarity.
 2. **Xem chi tiết**: `GET /api/terms/:slug` → render `content_md` bằng react-markdown + GFM.
-3. **Enrich-on-miss**: search rỗng → UI hiện nút Enrich → `POST /api/terms/enrich` →
-   `getOrEnrich`: có trong DB trả ngay; không có → prompt tiếng Việt (Gemini-style:
-   intro + bảng "Hạng mục phát triển|Chi tiết kỹ thuật" + Variations) → model trả JSON
-   → zod validate (`AiTermSchema`) → upsert `terms` (ON CONFLICT term) → trả về.
+3. **Enrich-on-miss (streaming)**: `POST /api/terms/enrich` trả **SSE**. Có trong DB →
+   event `done` ngay (không gọi AI). Chưa có → `chatStream` forward delta ZAI thành event
+   `delta` (client render dần markdown qua `StreamDetail`); khi stream xong:
+   `parseEnrichOutput` (head `TERM/IPA/CATEGORY/SHORT/RELATED` + delimiter `---` + markdown)
+   → upsert `terms` (ON CONFLICT term) → event `done` với term đã lưu. Lỗi → event `error`.
+   DB chỉ ghi khi nội dung trọn vẹn; seed script dùng path non-stream cùng format.
 
 ## Data model — `terms`
 

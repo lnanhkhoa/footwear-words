@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { chat } from '../ai/zai.js';
+import { chat, type ChatMessage } from '../ai/zai.js';
 
 export interface EnrichedTerm {
   term: string;
@@ -10,78 +10,97 @@ export interface EnrichedTerm {
   contentMd: string;
 }
 
+/**
+ * Output format stream-friendly: head dạng `KEY: value`, delimiter `---`, rồi
+ * content markdown. Client render dần phần markdown; server parse + validate
+ * khi stream xong mới ghi DB.
+ */
 const SYSTEM_PROMPT = `Bạn là chuyên gia thuật ngữ ngành FOOTWEAR DEVELOPMENT (phát triển sản phẩm giày dép),
 kiêm biên dịch Anh-Việt kỹ thuật. Nhiệm vụ: giải thích một thuật ngữ tiếng Anh trong ngành giày.
 
-Trả về DUY NHẤT một object JSON hợp lệ (không kèm giải thích, không bọc code fence), theo schema:
-{
-  "term": string,            // thuật ngữ tiếng Anh, viết chuẩn (Title Case nếu là danh từ riêng kỹ thuật)
-  "ipa": string | null,      // phiên âm IPA nếu biết, ngược lại null
-  "category": string | null, // 1 công đoạn/nhóm: "Upper", "Bottom", "Lasting", "Cutting", "Stitching", "Construction", "Material"...
-  "short_vi": string,        // 1-2 câu định nghĩa tiếng Việt ngắn gọn (KHÔNG markdown)
-  "related_terms": string[], // 3-6 thuật ngữ tiếng Anh liên quan
-  "content_md": string       // markdown giàu cấu trúc, xem yêu cầu bên dưới
-}
+Trả về ĐÚNG định dạng sau (plain text, KHÔNG code fence, KHÔNG giải thích thêm):
+TERM: <thuật ngữ tiếng Anh viết chuẩn (Title Case nếu là danh từ riêng kỹ thuật)>
+IPA: <phiên âm IPA nếu biết, ngược lại gõ ->
+CATEGORY: <1 công đoạn/nhóm: "Upper", "Bottom", "Lasting", "Cutting", "Stitching", "Construction", "Material"... hoặc gõ ->
+SHORT: <1-2 câu định nghĩa tiếng Việt ngắn gọn, KHÔNG markdown>
+RELATED: <3-6 thuật ngữ tiếng Anh liên quan, phân cách bằng dấu phẩy>
+---
+<markdown giàu cấu trúc theo yêu cầu bên dưới. KHÔNG dùng thêm dòng --- trong phần này.>
 
-Yêu cầu content_md (bằng TIẾNG VIỆT, giữ nguyên thuật ngữ tiếng Anh, phong cách như Google Gemini):
-1. Mở đầu 1-2 đoạn văn: nêu bản chất thuật ngữ. **In đậm** các thuật ngữ tiếng Anh chủ chốt kèm nghĩa Việt trong ngoặc, *in nghiêng* các tên gọi khác/lưu ý.
+Yêu cầu markdown (bằng TIẾNG VIỆT, giữ nguyên thuật ngữ tiếng Anh, TỔNG THỂ ~300 từ — ưu tiên cô đọng):
+1. Mở đầu MỘT đoạn 2-4 câu: nêu bản chất thuật ngữ. **In đậm** thuật ngữ tiếng Anh chủ chốt kèm nghĩa Việt trong ngoặc, *in nghiêng* tên gọi khác/lưu ý.
 2. Một heading "## Key Technical Aspects" rồi MỘT BẢNG MARKDOWN (GFM) đúng 2 cột:
    | Hạng mục phát triển | Chi tiết kỹ thuật |
-   Mỗi hàng: cột trái là hạng mục (ví dụ "Upper Pattern (Cấu trúc mui giày)"), cột phải mô tả kỹ thuật,
-   **in đậm** thuật ngữ tiếng Anh, có thể *in nghiêng* ghi chú so sánh. Tối thiểu 3 hàng.
-3. Nếu có biến thể/phân loại: mục "## Variations" với bullet list, mỗi bullet **Tên biến thể:** mô tả ngắn.
+   Đúng 3-5 hàng; mỗi ô tối đa 1-2 câu, **in đậm** thuật ngữ tiếng Anh, *in nghiêng* ghi chú so sánh.
+3. Chỉ khi thuật ngữ có biến thể/phân loại rõ ràng: mục "## Variations", tối đa 4 bullet, mỗi bullet **Tên biến thể:** 1 câu ngắn.
 Không bịa thông tin sai. Nếu thuật ngữ không thuộc ngành giày, vẫn giải thích nghĩa gần nhất và ghi chú.`;
 
-function extractJson(raw: string): string {
-  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const text = fence ? fence[1] : raw;
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('No JSON object in AI response.');
-  return text.slice(start, end + 1);
+export function buildEnrichMessages(term: string): ChatMessage[] {
+  return [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: `Thuật ngữ cần giải thích: "${term.trim()}"` },
+  ];
 }
 
-const AiTermSchema = z.object({
-  term: z.string().optional(),
-  ipa: z.string().nullish(),
-  category: z.string().nullish(),
-  short_vi: z.string(),
-  related_terms: z.array(z.string()).default([]),
-  content_md: z.string(),
-});
+/** Parse head `KEY: value` + delimiter `---` + markdown body thành EnrichedTerm. */
+export function parseEnrichOutput(raw: string, fallbackTerm: string): EnrichedTerm {
+  const text = raw.trim();
 
-export async function enrichTerm(rawTerm: string): Promise<EnrichedTerm> {
-  const term = rawTerm.trim();
-  const content = await chat([
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: `Thuật ngữ cần giải thích: "${term}"` },
-  ]);
+  // Model thỉnh thoảng viền đậm `**SHORT:**` hoặc viết hoa khác — nới lỏng regex,
+  // tìm trên TOÀN BỘ text chứ không chỉ head (chống lệch vị trí dòng).
+  const field = (name: string) =>
+    text.match(new RegExp(`^[*_ \\t]*${name}[*_ \\t]*:(.*)$`, 'im'))?.[1]?.trim() ?? '';
 
-  let raw: unknown;
-  try {
-    raw = JSON.parse(extractJson(content));
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Không parse được JSON từ AI cho "${term}": ${msg}`);
+  // Ưu tiên delimiter `---`; nếu model quên, markdown = phần sau dòng head cuối.
+  const sepMatch = text.match(/^---[ \t]*\r?$/m);
+  let md = '';
+  if (sepMatch) {
+    const nl = text.indexOf('\n', sepMatch.index ?? 0);
+    md = nl === -1 ? '' : text.slice(nl + 1).trim();
+  } else {
+    const heads = ['TERM', 'IPA', 'CATEGORY', 'SHORT', 'RELATED']
+      .map((n) => text.match(new RegExp(`^[*_ \\t]*${n}[*_ \\t]*:.*$`, 'im')))
+      .filter((m): m is RegExpMatchArray => m !== null);
+    const lastEnd = heads.length
+      ? Math.max(...heads.map((m) => (m.index ?? 0) + m[0].length))
+      : -1;
+    if (lastEnd === -1) {
+      md = text; // không có head nào — SHORT sẽ fail bên dưới kèm snippet
+    } else {
+      const nl = text.indexOf('\n', lastEnd);
+      md = nl === -1 ? '' : text.slice(nl + 1).trim();
+    }
   }
 
-  const result = AiTermSchema.safeParse(raw);
-  if (!result.success) {
-    throw new Error(`AI JSON sai schema cho "${term}": ${result.error.message}`);
-  }
+  const clean = (v: string) => (v === '-' || v === '—' ? '' : v);
+  // Model thỉnh thoảng để lộ artifact emphasis (`**TERM:**`) — bỏ `*`/`_` thừa.
+  const tidy = (v: string) => clean(v).replace(/[*_]/g, '').trim();
 
-  const shortVi = result.data.short_vi.trim();
-  const contentMd = result.data.content_md.trim();
-  if (!shortVi || !contentMd) {
-    throw new Error(`AI thiếu short_vi/content_md cho "${term}".`);
+  const shortVi = tidy(field('SHORT'));
+  if (!shortVi || !md) {
+    const snippet = text.slice(0, 160).replace(/\s+/g, ' ');
+    throw new Error(
+      `AI output sai định dạng (thiếu SHORT hoặc markdown) cho "${fallbackTerm}": "${snippet}…"`,
+    );
   }
 
   return {
-    term: result.data.term?.trim() || term,
-    ipa: result.data.ipa?.trim() || null,
-    category: result.data.category?.trim() || null,
+    term: tidy(field('TERM')) || fallbackTerm,
+    ipa: tidy(field('IPA')) || null,
+    category: tidy(field('CATEGORY')) || null,
     shortVi,
-    relatedTerms: result.data.related_terms.map((s) => s.trim()).filter(Boolean).slice(0, 8),
-    contentMd,
+    relatedTerms: field('RELATED')
+      .split(',')
+      .map((s) => tidy(s))
+      .filter(Boolean)
+      .slice(0, 8),
+    contentMd: md,
   };
+}
+
+/** Non-stream variant (dùng bởi seed script). */
+export async function enrichTerm(rawTerm: string): Promise<EnrichedTerm> {
+  const term = rawTerm.trim();
+  const content = await chat(buildEnrichMessages(term), { maxTokens: 2048 });
+  return parseEnrichOutput(content, term);
 }

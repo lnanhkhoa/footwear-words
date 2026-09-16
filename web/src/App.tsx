@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
-import { searchTerms, getTerm, enrichTerm, type SearchRow, type Term } from '@/lib/api';
+import { searchTerms, getTerm, enrichTermStream, type SearchRow, type Term } from '@/lib/api';
 import { useTheme } from '@/lib/use-theme';
 import { cn } from '@/lib/utils';
 import TermDetail from '@/components/TermDetail';
+import StreamDetail from '@/components/StreamDetail';
 
 const SUGGESTIONS = ['Derby', 'Goodyear Welt', 'Lasting', 'Outsole', 'Blake Stitch'];
 
@@ -18,9 +19,13 @@ export default function App() {
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<Term | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [enriching, setEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [streamText, setStreamText] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const pendRef = useRef('');
+  const flushTimerRef = useRef<number | undefined>(undefined);
   const debounceRef = useRef<number | undefined>(undefined);
   const { theme, toggle } = useTheme();
 
@@ -72,11 +77,33 @@ export default function App() {
   async function loadOrEnrich(term: string) {
     const trimmed = term.trim();
     if (!trimmed) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setLoadingDetail(true);
-    setEnriching(true);
+    setStreaming(true);
+    setStreamText('');
+    pendRef.current = '';
     setEnrichError(null);
+    const flush = () => {
+      flushTimerRef.current = undefined;
+      if (!pendRef.current) return;
+      setStreamText((prev) => prev + pendRef.current);
+      pendRef.current = '';
+    };
     try {
-      const data = await enrichTerm(trimmed);
+      const data = await enrichTermStream(trimmed, {
+        signal: ac.signal,
+        // Throttle render ~10 fps để react-markdown không parse lại từng token.
+        onDelta: (t) => {
+          pendRef.current += t;
+          if (flushTimerRef.current === undefined) {
+            flushTimerRef.current = window.setTimeout(flush, 100);
+          }
+        },
+      });
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = undefined;
       setSelected(data.term);
       setResults((prev) => {
         const row: SearchRow = {
@@ -90,16 +117,21 @@ export default function App() {
         return [row, ...prev.filter((r) => r.slug !== row.slug)];
       });
     } catch (err) {
-      setEnrichError(err instanceof Error ? err.message : String(err));
+      if ((err as Error).name !== 'AbortError') {
+        setEnrichError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setLoadingDetail(false);
-      setEnriching(false);
+      if (abortRef.current === ac) {
+        setStreaming(false);
+        setLoadingDetail(false);
+        abortRef.current = null;
+      }
     }
   }
 
   const noResults = !searching && query.trim().length > 0 && results.length === 0;
   const hasQuery = query.trim().length > 0;
-  const showWorkspace = hasQuery || selected !== null;
+  const showWorkspace = hasQuery || selected !== null || loadingDetail;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -194,10 +226,16 @@ export default function App() {
           </p>
         )}
 
+        {enrichError && !showWorkspace && (
+          <p className="mt-4 text-center text-sm font-medium text-danger">
+            Lỗi: {enrichError}
+          </p>
+        )}
+
         {showWorkspace && (
           <div className="mt-12 grid flex-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
             <div className="flex flex-col gap-3">
-              {searching && (
+              {(searching || (streaming && results.length === 0)) && (
                 <>
                   <Skeleton className="h-16 w-full" />
                   <Skeleton className="h-16 w-full" />
@@ -242,20 +280,12 @@ export default function App() {
                     <p className="text-sm text-muted">
                       Chưa có{' '}
                       <span className="font-bold text-foreground">“{query.trim()}”</span> trong bộ
-                      từ. Hỏi AI để giải thích và lưu vào từ điển.
                     </p>
                     {enrichError && <p className="text-sm font-medium text-danger">{enrichError}</p>}
-                    <Button onClick={() => void loadOrEnrich(query.trim())} disabled={enriching}>
+                    <Button onClick={() => void loadOrEnrich(query.trim())} disabled={streaming}>
                       <Sparkles aria-hidden />
-                      {enriching ? 'Đang hỏi AI...' : `Enrich “${query.trim()}” bằng AI`}
+                      {streaming ? 'Đang hỏi AI...' : `Enrich “${query.trim()}” bằng AI`}
                     </Button>
-                    {enriching && (
-                      <div className="w-full space-y-2 pt-1">
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-5/6" />
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               )}
@@ -263,7 +293,7 @@ export default function App() {
 
             {/* Detail column */}
             <div className="mx-auto w-full max-w-3xl">
-              {loadingDetail && (
+              {loadingDetail && !streaming && (
                 <div className="space-y-3">
                   <Skeleton className="h-10 w-1/2" />
                   <Skeleton className="h-4 w-full" />
@@ -271,6 +301,8 @@ export default function App() {
                   <Skeleton className="h-64 w-full" />
                 </div>
               )}
+
+              {streaming && <StreamDetail text={streamText} />}
               {!loadingDetail && enrichError && selected && (
                 <p className="mb-3 text-sm font-medium text-danger">{enrichError}</p>
               )}

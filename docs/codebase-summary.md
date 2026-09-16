@@ -8,11 +8,11 @@
 | File | Vai trò |
 |---|---|
 | `env.ts` | đọc env (Bun auto-load .env), fail-fast thiếu DATABASE_URL |
-| `ai/zai.ts` | fetch `/chat/completions` OpenAI-compatible, zod-validate response |
-| `services/enrich.ts` | SYSTEM_PROMPT Gemini-style, `extractJson`, `AiTermSchema` |
-| `services/terms.ts` | searchTerms (pg_trgm raw SQL), getBySlug, findByTerm, upsertEnriched, getOrEnrich |
+| `ai/zai.ts` | fetch `/chat/completions` OpenAI-compatible; `chat` (non-stream) + `chatStream` (SSE delta) |
+| `services/enrich.ts` | SYSTEM_PROMPT format stream-friendly (`KEY: value` head + `---` + markdown), `parseEnrichOutput`, `enrichTerm` non-stream cho seed |
+| `services/terms.ts` | searchTerms (pg_trgm raw SQL), getBySlug, findByTerm, upsertEnriched |
 | `db/schema.ts` / `client.ts` / `migrate.ts` | bảng terms, drizzle+postgres.js, migration idempotent |
-| `app.ts` | routes: /health, /search, /:slug, /enrich (cors bật) |
+| `app.ts` | routes: /health, /search, /:slug, /enrich (SSE: delta/done/error, cors bật) |
 | `index.ts` | Bun.serve entry |
 | `scripts/seed.ts` | đọc wordlist → enrich tuần tự → upsert (`--force` ghi đè) |
 | `scripts/mock-zai.ts` | mock OpenAI-compatible cho dev/test |
@@ -20,9 +20,10 @@
 ## Web (`web/src`)
 | File | Vai trò |
 |---|---|
-| `lib/api.ts` | typed client (searchTerms/getTerm/enrichTerm), VITE_API_URL base |
-| `App.tsx` | state search debounced 300ms, list kết quả, enrich-on-miss card, layout 2 cột |
-| `components/TermDetail.tsx` | react-markdown + remark-gfm, related-term chips |
+| `lib/api.ts` | typed client (searchTerms/getTerm/enrichTermStream — đọc SSE bằng fetch reader) |
+| `App.tsx` | search debounced 300ms, enrich stream + throttle render 100ms, StreamDetail preview khi AI đang viết |
+| `components/TermDetail.tsx` | term đã lưu: react-markdown + remark-gfm, related-term chips |
+| `components/StreamDetail.tsx` | preview render dần output AI (head parse + caret volt) |
 | `components/ui/*` | Button/Input/Card/Badge/Skeleton shadcn-style |
 | `index.css` | Tailwind v4 `@theme inline` tokens + `.markdown-body` styles |
 
